@@ -4,9 +4,9 @@
 
 | Tool | Status |
 |------|--------|
-| .NET SDK | 10.0.300 |
+| .NET SDK | 8.0+ |
 | Flutter | 3.44.0+ (configured in `scripts\config.ps1` or added to system PATH) |
-| API build | OK (targets `net10.0`) |
+| API build | OK (targets `net8.0`) |
 | API smoke test | Login + devices OK |
 
 ## Run everything in **Cursor terminal**

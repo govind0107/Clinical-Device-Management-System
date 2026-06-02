@@ -19,8 +19,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseSqlite(connectionString);
     else
         options.UseSqlServer(connectionString);
-
-    options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
 });
 
 builder.Services.AddSingleton<SimulationState>();

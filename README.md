@@ -4,6 +4,27 @@ Full-stack assignment implementation: **Flutter 3** client + **ASP.NET Core 8** 
 
 > **Synthetic data only** — no real patient information. A background simulation service generates ECG, SpO2, and BP waveforms.
 
+## Tech Stack
+
+### Backend
+- ASP.NET Core 8 Web API
+- Entity Framework Core
+- SQL Server
+- SignalR
+- JWT Authentication
+- Swagger/OpenAPI
+
+### Frontend
+- Flutter 3
+- Riverpod
+- Dio
+- SignalR Client
+- fl_chart
+- SQLite
+
+### Infrastructure
+- Docker Compose
+
 ## Architecture
 
 ```
@@ -23,11 +44,25 @@ Full-stack assignment implementation: **Flutter 3** client + **ASP.NET Core 8** 
 
 See [docs/architecture.md](docs/architecture.md) for the formal diagram.
 
+## Features
+
+- JWT Authentication with role-based access
+- Device CRUD Management
+- Patient CRUD Management
+- Monitoring Sessions
+- Real-time telemetry using SignalR
+- Live ECG, SpO2, and BP plotting
+- Threshold-based alerts
+- Alert acknowledgment workflow
+- Historical playback
+- CSV/PDF export
+- Offline caching with SQLite
+
 ## Prerequisites
 
 | Tool | Version |
 |------|---------|
-| [.NET SDK](https://dotnet.microsoft.com/download) | 10.0+ |
+| [.NET SDK](https://dotnet.microsoft.com/download) | 8.0+ |
 | [Flutter SDK](https://docs.flutter.dev/get-started/install) | 3.x |
 | [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Optional |
 
