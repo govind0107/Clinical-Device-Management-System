@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,16 +24,27 @@ class DeviceDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<DeviceDetailScreen> createState() => _DeviceDetailScreenState();
 }
 
-class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
+class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> with SingleTickerProviderStateMixin {
   SessionModel? _activeSession;
   String? _selectedPatientId;
   var _busy = false;
   var _leaving = false;
 
+  // Blinking dot animation for active vitals tracking
+  late AnimationController _pulseController;
+  late Animation<double> _pulseScale;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncExistingSession());
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+    _pulseScale = Tween<double>(begin: 0.85, end: 1.15).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
   }
 
   /// If user left without Stop, server may still have an active session (causes 409).
@@ -59,6 +69,7 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
 
   @override
   void dispose() {
+    _pulseController.dispose();
     final session = _activeSession;
     if (session != null) {
       unawaited(ref.read(apiServiceProvider).stopSession(session.sessionId));
@@ -100,6 +111,7 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
     final chart = ref.watch(liveChartProvider);
     final role = ref.watch(authProvider).valueOrNull?.role ?? '';
     final canStart = RoleConfig.canStartSessions(role);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return PopScope(
       canPop: _activeSession == null && !_busy && !_leaving,
@@ -118,18 +130,18 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
                     if (ok && context.mounted) context.pop();
                   },
           ),
-          title: const Text('Live Monitor'),
+          title: const Text('ICU Live Monitor'),
           actions: [
             if (_activeSession != null)
               IconButton(
-                tooltip: 'Trigger threshold alert',
-                icon: const Icon(Icons.bolt),
+                tooltip: 'Simulate critical threshold event',
+                icon: const Icon(Icons.bolt, color: AppTheme.clinicalAmber, size: 28),
                 onPressed: _triggerSimulate,
               ),
           ],
         ),
         body: devicesAsync.when(
-          loading: () => const LoadingView(),
+          loading: () => const LoadingView(message: 'Initializing device signals...'),
           error: (e, _) =>
               ErrorView(message: e.toString(), onRetry: () => ref.invalidate(devicesProvider)),
           data: (devices) {
@@ -141,102 +153,360 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
               }
             }
             if (device == null) {
-              return const EmptyView(message: 'Device not found');
+              return const EmptyView(message: 'Clinical device not found');
             }
 
             final activeDevice = device;
+            final isSessionActive = _activeSession != null;
+
+            // Fetch the latest values for digital led readouts
+            final lastEcg = chart.channels['ECG']?.isNotEmpty == true ? chart.channels['ECG']!.last.value : null;
+            final lastSpo2 = chart.channels['SpO2']?.isNotEmpty == true ? chart.channels['SpO2']!.last.value : null;
+            final lastBp = chart.channels['BP']?.isNotEmpty == true ? chart.channels['BP']!.last.value : null;
 
             return Column(
               children: [
+                // Top control panel & patient settings
                 Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(activeDevice.serialNumber,
-                                style: Theme.of(context).textTheme.titleLarge),
-                            Text('${activeDevice.model} • ${activeDevice.status}',
-                                style:
-                                    TextStyle(color: AppTheme.statusColor(activeDevice.status))),
-                          ],
-                        ),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF131B2E) : Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFE2E8F0),
+                        width: 1.5,
                       ),
-                      if (canStart)
-                        patientsAsync.when(
-                          data: (patients) => DropdownButton<String?>(
-                            hint: const Text('Select Patient'),
-                            value: _selectedPatientId,
-                            items: patients.map((p) => DropdownMenuItem<String?>(
-                                  value: p.patientId,
-                                  child: Text(p.name),
-                                )).toList(),
-                            onChanged: _activeSession == null
-                                ? (v) => setState(() => _selectedPatientId = v)
-                                : null,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.statusColor(activeDevice.status).withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.settings_input_hdmi_rounded,
+                                  color: AppTheme.statusColor(activeDevice.status),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      activeDevice.serialNumber,
+                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: -0.2,
+                                          ),
+                                    ),
+                                    Text(
+                                      '${activeDevice.model} • ${activeDevice.status.toUpperCase()}',
+                                      style: TextStyle(
+                                        color: AppTheme.statusColor(activeDevice.status),
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
-                        ),
-                      const SizedBox(width: 8),
-                      if (canStart && _activeSession == null)
-                        FilledButton.icon(
-                          onPressed: _busy || _selectedPatientId == null
-                              ? null
-                              : () => _startSession(activeDevice, patientsAsync),
-                          icon: const Icon(Icons.play_arrow),
-                          label: const Text('Start'),
-                        )
-                      else if (canStart)
-                        FilledButton.tonalIcon(
-                          onPressed: _busy ? null : () => _stopSession(patientsAsync),
-                          icon: const Icon(Icons.stop),
-                          label: const Text('Stop'),
-                        ),
-                    ],
+                          const Divider(height: 32),
+                          Row(
+                            children: [
+                              if (canStart)
+                                Expanded(
+                                  child: patientsAsync.when(
+                                    data: (patients) => InputDecorator(
+                                      decoration: const InputDecoration(
+                                        labelText: 'Assign Patient Profile',
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                      ),
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String?>(
+                                          value: _selectedPatientId,
+                                          isExpanded: true,
+                                          hint: const Text('Select Patient', style: TextStyle(fontWeight: FontWeight.w500)),
+                                          items: patients.map((p) => DropdownMenuItem<String?>(
+                                                value: p.patientId,
+                                                child: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                              )).toList(),
+                                          onChanged: !isSessionActive
+                                              ? (v) => setState(() => _selectedPatientId = v)
+                                              : null,
+                                        ),
+                                      ),
+                                    ),
+                                    loading: () => const LinearProgressIndicator(),
+                                    error: (_, __) => const Text('Error loading patient list'),
+                                  ),
+                                ),
+                              const SizedBox(width: 16),
+                              if (canStart && !isSessionActive)
+                                Container(
+                                  decoration: BoxDecoration(
+                                    gradient: _selectedPatientId == null ? null : AppTheme.greenGradient,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: _selectedPatientId == null 
+                                        ? null 
+                                        : AppTheme.glowShadow(AppTheme.clinicalGreen, opacity: 0.3, blur: 10),
+                                  ),
+                                  child: FilledButton.icon(
+                                    onPressed: _busy || _selectedPatientId == null
+                                        ? null
+                                        : () => _startSession(activeDevice, patientsAsync),
+                                    icon: const Icon(Icons.play_arrow_rounded),
+                                    label: const Text('BOOT MONITOR'),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: _selectedPatientId == null ? Colors.grey : Colors.transparent,
+                                      foregroundColor: Colors.white,
+                                      shadowColor: Colors.transparent,
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                    ),
+                                  ),
+                                )
+                              else if (canStart)
+                                Container(
+                                  decoration: BoxDecoration(
+                                    gradient: AppTheme.redGradient,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: AppTheme.glowShadow(AppTheme.clinicalRed, opacity: 0.3, blur: 10),
+                                  ),
+                                  child: FilledButton.icon(
+                                    onPressed: _busy ? null : () => _stopSession(patientsAsync),
+                                    icon: const Icon(Icons.stop_rounded),
+                                    label: const Text('TERMINATE'),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      foregroundColor: Colors.white,
+                                      shadowColor: Colors.transparent,
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Wrap(
-                    spacing: 8,
-                    children: chart.enabled.keys.map((ch) {
-                      final on = chart.enabled[ch] ?? true;
-                      return FilterChip(
-                        label: Text(ch),
-                        selected: on,
-                        onSelected: (_) =>
-                            ref.read(liveChartProvider.notifier).toggleChannel(ch),
-                      );
-                    }).toList(),
+
+                // Channel Toggles Row
+                if (isSessionActive)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Vitals Channels:',
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Wrap(
+                            spacing: 10,
+                            children: chart.enabled.keys.map((ch) {
+                              final on = chart.enabled[ch] ?? true;
+                              final color = channelColors[ch] ?? Colors.blue;
+                              return FilterChip(
+                                label: Text(ch),
+                                selected: on,
+                                selectedColor: color.withValues(alpha: 0.15),
+                                checkmarkColor: color,
+                                labelStyle: TextStyle(
+                                  color: on ? color : null,
+                                  fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                                onSelected: (_) =>
+                                    ref.read(liveChartProvider.notifier).toggleChannel(ch),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+
+                // Live Vitals Monitor Board
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: chart.enabled.entries.where((e) => e.value).map((e) {
-                      final ch = e.key;
-                      return SizedBox(
-                        height: 180,
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: LiveTelemetryChart(
-                              channel: ch,
-                              points: chart.channels[ch] ?? [],
-                              color: channelColors[ch] ?? Colors.blue,
+                  child: !isSessionActive
+                      ? Center(
+                          child: Container(
+                            margin: const EdgeInsets.all(24),
+                            padding: const EdgeInsets.all(32),
+                            constraints: const BoxConstraints(maxWidth: 450),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF131B2E) : Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.sensors_off_rounded, size: 48, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.25)),
+                                const SizedBox(height: 20),
+                                const Text(
+                                  'TELEMETRY OFFLINE',
+                                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 1.0),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  'No clinical monitoring session is active. Assign a patient and tap "BOOT MONITOR" above to start live SignalR telemetry.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                                    height: 1.4,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
+                        )
+                      : Container(
+                          margin: const EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF070B14), // Deep ICU Dark Mode screen
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: activeDevice.status.toLowerCase() == 'alert' 
+                                  ? AppTheme.clinicalRed 
+                                  : Colors.white.withValues(alpha: 0.08),
+                              width: 2,
+                            ),
+                            boxShadow: activeDevice.status.toLowerCase() == 'alert'
+                                ? AppTheme.glowShadow(AppTheme.clinicalRed, opacity: 0.15, blur: 24)
+                                : AppTheme.glowShadow(Colors.blue, opacity: 0.05, blur: 16),
+                          ),
+                          child: Column(
+                            children: [
+                              // Digital LED Vitals Dashboard Row
+                              Row(
+                                children: [
+                                  if (chart.enabled['ECG'] == true)
+                                    Expanded(
+                                      child: _LedVitalsBadge(
+                                        title: 'ECG / PULSE',
+                                        value: lastEcg != null ? lastEcg.toStringAsFixed(0) : '--',
+                                        unit: 'BPM',
+                                        color: AppTheme.clinicalRed,
+                                        child: ScaleTransition(
+                                          scale: _pulseScale,
+                                          child: const Icon(Icons.favorite_rounded, color: AppTheme.clinicalRed, size: 16),
+                                        ),
+                                      ),
+                                    ),
+                                  const SizedBox(width: 12),
+                                  if (chart.enabled['SpO2'] == true)
+                                    Expanded(
+                                      child: _LedVitalsBadge(
+                                        title: 'SpO2 / OX',
+                                        value: lastSpo2 != null ? lastSpo2.toStringAsFixed(0) : '--',
+                                        unit: '%',
+                                        color: AppTheme.clinicalBlue,
+                                        child: const Icon(Icons.water_drop_rounded, color: AppTheme.clinicalBlue, size: 16),
+                                      ),
+                                    ),
+                                  const SizedBox(width: 12),
+                                  if (chart.enabled['BP'] == true)
+                                    Expanded(
+                                      child: _LedVitalsBadge(
+                                        title: 'BLOOD PRES',
+                                        value: lastBp != null ? lastBp.toStringAsFixed(0) : '--',
+                                        unit: 'mmHg',
+                                        color: AppTheme.clinicalGreen,
+                                        child: const Icon(Icons.speed_rounded, color: AppTheme.clinicalGreen, size: 16),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              // Live Waves List/Grid
+                              Expanded(
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final enabledEntries = chart.enabled.entries.where((e) => e.value).toList();
+                                    final gridCols = constraints.maxWidth > 900 ? 2 : 1;
+                                    
+                                    if (gridCols > 1 && enabledEntries.length > 1) {
+                                      // Render Grid for large screens
+                                      return GridView.builder(
+                                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: 2,
+                                          mainAxisSpacing: 12,
+                                          crossAxisSpacing: 12,
+                                          childAspectRatio: 2.2,
+                                        ),
+                                        itemCount: enabledEntries.length,
+                                        itemBuilder: (ctx, i) {
+                                          final ch = enabledEntries[i].key;
+                                          return _buildWaveCard(ch, chart.channels[ch] ?? []);
+                                        },
+                                      );
+                                    } else {
+                                      // Standard stack list
+                                      return ListView(
+                                        children: enabledEntries.map((e) {
+                                          final ch = e.key;
+                                          return SizedBox(
+                                            height: 155,
+                                            child: Padding(
+                                              padding: const EdgeInsets.only(bottom: 12),
+                                              child: _buildWaveCard(ch, chart.channels[ch] ?? []),
+                                            ),
+                                          );
+                                        }).toList(),
+                                      );
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      );
-                    }).toList(),
-                  ),
                 ),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWaveCard(String channel, List<TelemetryPoint> points) {
+    final color = channelColors[channel] ?? Colors.blue;
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F1524),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.15), width: 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: LiveTelemetryChart(
+          channel: channel,
+          points: points,
+          color: color,
         ),
       ),
     );
@@ -331,7 +601,10 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
       await ref.read(apiServiceProvider).simulateDevice(widget.deviceId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Threshold spike sent — watch alerts')),
+          const SnackBar(
+            content: Text('Simulated vitals threshold spike sent.'),
+            backgroundColor: AppTheme.clinicalAmber,
+          ),
         );
       }
     } catch (e) {
@@ -339,5 +612,78 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
       }
     }
+  }
+}
+
+class _LedVitalsBadge extends StatelessWidget {
+  const _LedVitalsBadge({
+    required this.title,
+    required this.value,
+    required this.unit,
+    required this.color,
+    this.child,
+  });
+
+  final String title;
+  final String value;
+  final String unit;
+  final Color color;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F1524),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.15), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title.toUpperCase(),
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 10,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              if (child != null) child!,
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            textBaseline: TextBaseline.alphabetic,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                unit,
+                style: TextStyle(
+                  color: color.withValues(alpha: 0.5),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

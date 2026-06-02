@@ -59,13 +59,19 @@ class LiveTelemetryChart extends StatelessWidget {
           padding: const EdgeInsets.only(left: 48, right: 8),
           child: Row(
             children: [
-              Text(channel, style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                channel,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+              ),
               const Spacer(),
-              Text('Min ${stats.min.toStringAsFixed(1)}'),
+              _StatBadge('Min', stats.min.toStringAsFixed(1), color),
               const SizedBox(width: 8),
-              Text('Avg ${stats.avg.toStringAsFixed(1)}'),
+              _StatBadge('Avg', stats.avg.toStringAsFixed(1), color),
               const SizedBox(width: 8),
-              Text('Max ${stats.max.toStringAsFixed(1)}'),
+              _StatBadge('Max', stats.max.toStringAsFixed(1), color),
             ],
           ),
         ),
@@ -75,7 +81,15 @@ class LiveTelemetryChart extends StatelessWidget {
             LineChartData(
               minY: minY,
               maxY: maxY,
-              gridData: const FlGridData(show: true, drawVerticalLine: false),
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (value) => FlLine(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
+                  strokeWidth: 1,
+                  dashArray: [4, 4],
+                ),
+              ),
               titlesData: FlTitlesData(
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
@@ -88,8 +102,8 @@ class LiveTelemetryChart extends StatelessWidget {
                         space: 8,
                         child: Text(
                           value.toInt().toString(),
-                          style: const TextStyle(
-                            color: Colors.grey,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                           ),
@@ -108,9 +122,20 @@ class LiveTelemetryChart extends StatelessWidget {
                   spots: spots,
                   isCurved: true,
                   color: color,
-                  barWidth: 2,
+                  barWidth: 3,
+                  isStrokeCapRound: true,
                   dotData: const FlDotData(show: false),
-                  belowBarData: BarAreaData(show: true, color: color.withValues(alpha: 0.12)),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        color.withValues(alpha: 0.22),
+                        color.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -118,6 +143,33 @@ class LiveTelemetryChart extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _StatBadge extends StatelessWidget {
+  const _StatBadge(this.label, this.val, this.color);
+  final String label;
+  final String val;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.15), width: 1),
+      ),
+      child: Text(
+        '$label: $val',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+        ),
+      ),
     );
   }
 }
