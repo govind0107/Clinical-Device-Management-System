@@ -36,7 +36,7 @@ See [docs/architecture.md](docs/architecture.md) for the formal diagram.
 ## Quick start (Docker backend)
 
 ```powershell
-cd "C:\Users\vijay\OneDrive\Desktop\Clinical Device Management System"
+# Navigate to the repository root directory
 docker compose up --build
 ```
 
@@ -55,8 +55,8 @@ docker compose up --build
 
 ```powershell
 cd frontend\clinical_device_app
-C:\Users\vijay\flutter\bin\flutter pub get
-C:\Users\vijay\flutter\bin\flutter run -d windows --dart-define=API_BASE_URL=http://localhost:5000
+flutter pub get
+flutter run -d windows --dart-define=API_BASE_URL=http://localhost:5000
 ```
 
 Or from the repo root (uses `scripts\config.ps1`):

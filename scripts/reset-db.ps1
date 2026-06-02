@@ -1,7 +1,7 @@
 Write-Host "Stopping API if running..." -ForegroundColor Cyan
 Stop-Process -Name "ClinicalDevice.Api" -Force -ErrorAction SilentlyContinue
 
-$db = "C:\Users\vijay\OneDrive\Desktop\Clinical Device Management System\backend\ClinicalDevice.Api\clinical_device.db"
+$db = Join-Path $PSScriptRoot "..\backend\ClinicalDevice.Api\clinical_device.db"
 $wal = "$db-wal"
 $shm = "$db-shm"
 

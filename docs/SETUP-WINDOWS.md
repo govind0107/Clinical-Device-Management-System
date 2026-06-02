@@ -5,7 +5,7 @@
 | Tool | Status |
 |------|--------|
 | .NET SDK | 10.0.300 |
-| Flutter | 3.44.0 at **`C:\Users\vijay\flutter`** (configured in `scripts\config.ps1`) |
+| Flutter | 3.44.0+ (configured in `scripts\config.ps1` or added to system PATH) |
 | API build | OK (targets `net10.0`) |
 | API smoke test | Login + devices OK |
 
@@ -21,7 +21,7 @@
 The terminal should start in your project root. If not:
 
 ```powershell
-cd "C:\Users\vijay\OneDrive\Desktop\Clinical Device Management System"
+cd "C:\path\to\Clinical Device Management System"
 ```
 
 ### 3. Split into two terminals (backend + Flutter)
@@ -111,7 +111,7 @@ The project is under **OneDrive**, which often locks `ios/Flutter/ephemeral` and
 ### Add Flutter to PATH (optional)
 
 ```powershell
-[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Users\vijay\flutter\bin", "User")
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\path\to\flutter\bin", "User")
 ```
 
 Restart the terminal after changing PATH.
