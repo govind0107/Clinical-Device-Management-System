@@ -127,20 +127,3 @@ Postman collection: [docs/postman_collection.json](docs/postman_collection.json)
 ├── docs/
 └── README.md
 ```
-
-## Assignment checklist
-
-- [x] Flutter 3, Riverpod, dio, signalr_netcore, fl_chart, sqflite, Material 3
-- [x] Six screens: Login, Dashboard, Live Monitor, Patients, History, Alerts
-- [x] ASP.NET Core 8, EF Core, SQL Server, SignalR, JWT, Swagger
-- [x] Simulation background service (ECG / SpO2 / BP)
-- [x] docker-compose.yml
-- [x] Architecture diagram & README
-
-## Regenerate EF migrations (optional)
-
-```powershell
-cd backend\ClinicalDevice.Api
-dotnet ef migrations add <Name>
-dotnet ef database update
-```
